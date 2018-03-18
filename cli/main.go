@@ -3,10 +3,11 @@ package main
 import (
 	"fmt"
 	"github.com/gin-gonic/gin"
-	"github.com/sayden/doom"
+	"github.com/sayden/doomdb"
 	"github.com/thehivecorporation/log"
 	"os"
 	"strings"
+	"github.com/juju/errors"
 )
 
 var tempFolder = "/tmp"
@@ -35,20 +36,17 @@ func main() {
 			return
 		}
 
-		if e.Key == "" || len(e.Value) == 0 {
-			log.Error("Key or value not found")
-			c.JSON(500, gin.H{"status": "error", "msg": "Key or value not found"})
-			return
+		if err = insert(e, memtable); err != nil {
+			c.JSON(500, gin.H{"status": "error", "msg": err.Error()})
 		}
 
-		memtable.Insert(fmt.Sprintf("%s %s", e.Key, e.Value))
 	})
 
 	storageFile := memtable.StorageFile.Name()
 
 	r.POST("/", func(c *gin.Context) {
 		if err := memtable.Persist(); err != nil {
-			log.WithError(err).Fatal("Error persisting data on disk")
+			c.JSON(500, "Error persisting data on disk")
 		}
 	})
 
@@ -58,6 +56,19 @@ func main() {
 	})
 
 	r.Run(":8080")
+}
+
+func insert(e kv, memtable *doom.MemTable) (err error) {
+	if e.Key == "" || len(e.Value) == 0 {
+		err := errors.New("Key or value not found")
+		return
+	}
+
+	if err := memtable.Insert(fmt.Sprintf("%s %s", e.Key, e.Value)); err != nil {
+		err = errors.Annotate(err, "Error inserting data")
+	}
+
+	return
 }
 
 func findUsingIndex(fn string) {

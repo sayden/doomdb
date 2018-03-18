@@ -122,44 +122,32 @@ func (s *MemTable) Add(e Entry) *Entry {
 func (s *MemTable) Persist() (err error) {
 	defer s.Close()
 
-	b := make([]byte, s.AccBytes)
-
 	var accBytes int64
 	for i := 0; i < len(s.E); i++ {
-		s.persistEntry(b, i, &accBytes)
+		s.persistEntry(i, &accBytes)
 	}
 
-	if _, err = s.StorageFile.Write(b); err != nil {
+	return
+}
+
+func (s *MemTable) persistEntry(i int, accBytes *int64) (err error) {
+	e := s.E[i]
+
+	if _, err = s.StorageFile.Write(e.Data); err != nil {
 		err = errors.Annotatef(err, "Error trying to persist data on sstable file. Deleting sstable file")
 
 		err2 := deleteFile(s.StorageFile)
 		if err2 != nil {
 			err = errors.Annotatef(err, err2.Error())
 		}
+
+		return
 	} else {
 		err = deleteFile(s.walFile)
 		if err != nil {
 			err = errors.Annotatef(err, "Could not delete WAL file. Data has been stored properly on a SSTable file.")
 		}
 	}
-
-	s.StorageFile, s.walFile, err = createDbFiles(s.storageFolder, s.tempFolder)
-
-	return
-}
-
-func deleteFile(f *os.File) (err error) {
-	if err = os.Remove(f.Name()); err != nil {
-		err = errors.Annotatef(err, "Could not remove storage file. Data is still available in the Write Ahead Log file but couldn't be persisted to disk. Maybe a permissions problem?")
-	}
-
-	return
-}
-
-func (s *MemTable) persistEntry(b []byte, i int, accBytes *int64) {
-	e := s.E[i]
-
-	insertIntoSlice(e.Data, b, *accBytes)
 
 	temp := s.Get(e.Key)
 	temp.Offset = *accBytes
@@ -168,12 +156,16 @@ func (s *MemTable) persistEntry(b []byte, i int, accBytes *int64) {
 	*accBytes += e.Length
 }
 
-func insertIntoSlice(o, d []byte, offset int64) {
-	for i := 0; i < len(o); i++ {
-		d[int64(i)+offset] = o[i]
+func deleteFile(f *os.File) (err error) {
+	if err = os.Remove(f.Name()); err != nil {
+		err = errors.Annotatef(err, "Could not remove file. Data is still available in either the Write " +
+			"Ahead Log or the SStable file. It just couldn't be deleted. Maybe a permissions problem?")
 	}
+
+	return
 }
 
+//getKey returns the possible key of a string entry
 func getKey(s string) string {
 	defer func() {
 		if r := recover(); r != nil {

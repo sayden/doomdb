@@ -12,7 +12,7 @@ import (
 var tempFolder = "/tmp"
 var storageFolder = "/tmp"
 
-var memtable *doom.SortedEntry
+var memtable *doom.MemTable
 
 type kv struct {
 	Key   string `json:"key,omitempty"`

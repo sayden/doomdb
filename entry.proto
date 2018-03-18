@@ -9,8 +9,12 @@ message Entry {
     bytes data = 4;
 }
 
-message SSTableIndex {
+message SSTableSingleIndex {
     string key = 1;
     int64 offset = 2;
     string fileName = 3;
+}
+
+message SSTableIndex {
+    repeated SSTableSingleIndex indices = 1;
 }

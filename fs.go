@@ -104,16 +104,37 @@ func createDbFiles(storageFolder, tempFolder string) (storageFile *os.File, walF
 	return
 }
 
+func extractSuffix(prefix, s string) string {
+	pos := strings.LastIndex(s, prefix)
+	return s[pos+len(prefix):]
+}
+
+func createIndexFile(storageFilename, storagePath string) (indexFile *os.File, err error) {
+	suffix := extractSuffix(WAL_PREFIX, storageFilename)
+
+	newFile := fmt.Sprintf("%s/%s%s", storagePath, INDEX_PREFIX, suffix)
+
+	if indexFile, err = os.Create(newFile); err != nil {
+		err = errors.Annotatef(err, "Could not create index file '%s'", newFile)
+	}
+
+	return
+}
+
 func createWALFileOn(tempFolder string) (walFile *os.File, err error) {
-	if walFile, err = ioutil.TempFile(tempFolder, "write_ahead_log"); err != nil {
+	if walFile, err = ioutil.TempFile(tempFolder, WAL_PREFIX); err != nil {
 		err = errors.Annotatef(err, "Error trying to create a temp file for WAL")
 	}
 
 	return
 }
 
+func createSSTableFileWithSuffix(storageFolder, filename string) (*os.File, error) {
+	return os.Create(fmt.Sprintf("%s/%s%s", storageFolder, SSTABLES_PREFIX, extractSuffix(WAL_PREFIX, filename)))
+}
+
 func createSStableFileOn(storageFolder string) (newSStable *os.File, err error) {
-	if newSStable, err = ioutil.TempFile(storageFolder, "sstable"); err != nil {
+	if newSStable, err = ioutil.TempFile(storageFolder, SSTABLES_PREFIX); err != nil {
 		err = errors.Annotatef(err, "Could not create SSTable file")
 	}
 

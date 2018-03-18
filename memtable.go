@@ -88,7 +88,10 @@ func (s *MemTable) Write(p []byte) (n int, err error) {
 	s.Add(e)
 	s.Set(e.Key, &e)
 
-	sort.Sort(s)
+	if SORT_ON_INSERTION {
+		sort.Sort(s)
+	}
+
 
 	return int(e.Length), nil
 }
@@ -122,6 +125,10 @@ func (s *MemTable) Add(e Entry) *Entry {
 func (s *MemTable) Persist() (err error) {
 	defer s.Close()
 
+	if !SORT_ON_INSERTION {
+		sort.Sort(s)
+	}
+
 	var accBytes int64
 	for i := 0; i < len(s.E); i++ {
 		s.persistEntry(i, &accBytes)
@@ -154,6 +161,8 @@ func (s *MemTable) persistEntry(i int, accBytes *int64) (err error) {
 	temp.Data = nil
 
 	*accBytes += e.Length
+
+	return
 }
 
 func deleteFile(f *os.File) (err error) {

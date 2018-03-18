@@ -93,11 +93,18 @@ func readWALFileToMemTable(filePath string, s *MemTable) {
 }
 
 func createDbFiles(storageFolder, tempFolder string) (storageFile *os.File, walFile *os.File, err error) {
-	if storageFile, err = ioutil.TempFile(storageFolder, "sstable"); err != nil {
-		err = errors.Annotatef(err, "Error trying to create a temp file for SSTable")
+	if storageFile, err = createSStableFileOn(storageFolder); err != nil {
 		return
 	}
 
+	if walFile, err = createWALFileOn(tempFolder); err != nil {
+		err = errors.Annotatef(err, "Error trying to create a temp file for WAL")
+	}
+
+	return
+}
+
+func createWALFileOn(tempFolder string) (walFile *os.File, err error) {
 	if walFile, err = ioutil.TempFile(tempFolder, "write_ahead_log"); err != nil {
 		err = errors.Annotatef(err, "Error trying to create a temp file for WAL")
 	}
@@ -105,7 +112,10 @@ func createDbFiles(storageFolder, tempFolder string) (storageFile *os.File, walF
 	return
 }
 
-// mergeSSTablesFilePaths TODO
-func mergeSSTablesFilePaths(a, b string) error {
+func createSStableFileOn(storageFolder string) (newSStable *os.File, err error) {
+	if newSStable, err = ioutil.TempFile(storageFolder, "sstable"); err != nil {
+		err = errors.Annotatef(err, "Could not create SSTable file")
+	}
 
+	return
 }

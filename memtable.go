@@ -18,7 +18,7 @@ func New(tempFolder, storageFolder string) (s *MemTable, err error) {
 		storageFolder: storageFolder,
 	}
 
-	cleanEmptyFilesOnTempFolder(tempFolder)
+	cleanEmptyFilesOnFolder(tempFolder)
 
 	if s.StorageFile, s.walFile, err = createDbFiles(storageFolder, tempFolder); err != nil {
 		log.WithError(err).Fatal("Error creating storage files")

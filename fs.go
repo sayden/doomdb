@@ -11,8 +11,8 @@ import (
 	"strings"
 )
 
-// cleanEmptyFilesOnTempFolder searches for files with size 0 on f and removes them
-func cleanEmptyFilesOnTempFolder(f string) {
+// cleanEmptyFilesOnFolder searches for files with size 0 on f and removes them
+func cleanEmptyFilesOnFolder(f string) {
 	files, err := ioutil.ReadDir(f)
 	if err != nil {
 		log.WithError(err).Errorf("Could not read folder %s", f)
@@ -109,9 +109,13 @@ func extractSuffix(prefix, s string) string {
 	return s[pos+len(prefix):]
 }
 
+func fileNameBasedOnTempFile(baseFilename, path, orPrefix, newPrefix string) string {
+	suffix := extractSuffix(orPrefix, baseFilename)
+	return fmt.Sprintf("%s/%s%s", path, newPrefix, suffix)
+}
+
 func createIndexFile(storageFilename, storagePath string) (indexFile *os.File, err error) {
 	suffix := extractSuffix(WAL_PREFIX, storageFilename)
-
 	newFile := fmt.Sprintf("%s/%s%s", storagePath, INDEX_PREFIX, suffix)
 
 	if indexFile, err = os.Create(newFile); err != nil {

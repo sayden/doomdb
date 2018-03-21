@@ -31,7 +31,9 @@ func (w *wal) Write(p []byte) (n int, err error) {
 }
 
 //Persist should flush the ordered content of a WAL file to disk
-func (w *wal) Persist() (err error) {
+func (w *wal) Persist() (fs []string, err error) {
+	fs = make([]string, 0)
+
 	s, _ := w.refFile.Stat()
 	log.WithField("size", s.Size()).Debug("Flusing WAL file")
 
@@ -59,27 +61,26 @@ startFlush:
 	}
 	log.WithField("name", ssTableFile.Name()).Debug("File created")
 	defer ssTableFile.Close()
+	fs = append(fs, ssTableFile.Name())
 
 	// Create an index object
 	indexFilename := fileNameBasedOnTempFile(ssTableFile.Name(), STORAGE_PATH, SSTABLES_PREFIX, INDEX_PREFIX)
 	sstableIndex := SSTableIndex{
-		Indices: make([]*SSTableSingleIndex, len(lines)),
+		Indices: make([]*SSTableSingleIndex, 0),
 	}
 
 	//Iterate over each line from WAL to create an index entry and write the contents to the SSTable file
 	var accBytes int64
 	var n int
 	for i := lastLineWritten; i < len(lines); i++ {
+
 		if accBytes >= MAX_SSTABLES_SIZE {
 			//We need to create a new SSTable and Index files
-			lastLineWritten++
-			accBytes = 0
-			n = 0
 			break
 		}
 
 		// Write to in-memory index
-		writeStringToSSTableIndex(lines[i], i, &sstableIndex, accBytes, indexFilename)
+		writeStringToSSTableIndex(lines[i], &sstableIndex, accBytes, indexFilename)
 
 		// Write to the SSTable file too
 		if n, err = writeStringToSSTableDisk(lines[i], ssTableFile); err != nil {
@@ -92,18 +93,22 @@ startFlush:
 		lastLineWritten = i
 	}
 
-	//Write index to disk
+	lastLineWritten++
+
+	//Close SSTable file
+	if err := ssTableFile.Close(); err != nil {
+		log.WithError(err).Errorf("Error closing SStable file '%s'", ssTableFile.Name())
+	}
+
+	//Write index to disk and close it
 	if err = writeSSTableIndexToDisk(&sstableIndex, indexFilename); err != nil {
 		err = errors.Annotate(err, "Could not write index to disk")
-		removeFiles(indexFilename, ssTableFile.Name())
+		removeFiles(append(fs, indexFilename)...)
 		return
 	}
 
-	if lastLineWritten == len(lines) {
-		if err := ssTableFile.Close(); err != nil {
-			log.WithError(err).Errorf("Error closing SStable file '%s'", ssTableFile.Name())
-		}
-
+	//Create a new file if more lines are left
+	if lastLineWritten < len(lines) {
 		goto startFlush
 	}
 
@@ -125,7 +130,8 @@ func removeFiles(fs ...string) {
 }
 
 func writeSSTableIndexToDisk(index *SSTableIndex, indexFilename string) (err error) {
-	indexFile, err := os.Create(indexFilename)
+	var indexFile *os.File
+	indexFile, err = os.Create(indexFilename)
 	if err != nil {
 		err = errors.Annotatef(err, "Could not create index file '%s'", indexFilename)
 		return
@@ -133,13 +139,12 @@ func writeSSTableIndexToDisk(index *SSTableIndex, indexFilename string) (err err
 	log.WithField("name", indexFile.Name()).Debug("File created")
 	defer indexFile.Close()
 
-	if byt, err := proto.Marshal(index); err != nil {
+	var byt []byte
+	if byt, err = proto.Marshal(index); err != nil {
 		err = errors.Annotatef(err, "Cannot marshal indices into bytes")
-		os.Remove(indexFile.Name())
 	} else {
-		if _, err := indexFile.Write(byt); err != nil {
+		if _, err = indexFile.Write(byt); err != nil {
 			err = errors.Annotatef(err, "Could not write to index file '%s'", indexFile.Name())
-			os.Remove(indexFile.Name())
 		}
 	}
 
@@ -156,12 +161,12 @@ func writeStringToSSTableDisk(line string, sstableFile *os.File) (n int, err err
 	return
 }
 
-func writeStringToSSTableIndex(line string, pos int, index *SSTableIndex, accBytes int64, indexFileName string) {
-	index.Indices[pos] = &SSTableSingleIndex{
+func writeStringToSSTableIndex(line string, index *SSTableIndex, accBytes int64, indexFileName string) {
+	index.Indices = append(index.Indices, &SSTableSingleIndex{
 		Key:      getKey(line),
 		Offset:   accBytes,
 		FileName: indexFileName,
-	}
+	})
 }
 
 //readFileLineByLine returns an slice with the contents of the file divided by line

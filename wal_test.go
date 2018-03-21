@@ -3,6 +3,7 @@ package doom
 import (
 	"io/ioutil"
 	"os"
+	"strings"
 	"testing"
 )
 
@@ -48,7 +49,7 @@ func TestPersist(t *testing.T) {
 		w.Write([]byte("Hello world"))
 		w.Write([]byte("ula korn"))
 
-		err := w.Persist()
+		_, err := w.Persist()
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -117,20 +118,63 @@ func TestPersist(t *testing.T) {
 			byt[i] = byte(78)
 		}
 		byt[10] = ' '
+		byt[0] = 'A'
 
 		w.Write(byt)
-		w.Write(byt)
+
+		byt[0] = 'B'
 		w.Write(byt)
 
-		if err := w.Persist(); err != nil {
+		byt[0] = 'C'
+		w.Write(byt)
+
+		fs, err := w.Persist()
+		if err != nil {
 			t.Fatal(err)
+		}
+		defer func() {
+			for _, s := range fs {
+				os.Remove(s)
+			}
+		}()
+
+		if len(fs) != 2 {
+			t.Fail()
 		}
 
 		t.Run("2 files must have been created in case of MAX_SSTABLES_SIZE=2048", func(t *testing.T) {
-			//files, err := ioutil.ReadDir(TEMP_PATH)
-			//if err != nil {
-			//	t.Fatal(err)
-			//}
+			t.Run("file 1", func(t *testing.T) {
+				f, _ := os.Open(fs[0])
+
+				byt, _ := ioutil.ReadAll(f)
+
+				lines := strings.Split(strings.TrimSpace(string(byt)), "\n")
+				if len(lines) != 2 {
+					t.Fail()
+				}
+
+				if lines[0][0] != 'A' {
+					t.Fail()
+				}
+				if lines[1][0] != 'B' {
+					t.Fail()
+				}
+			})
+
+			t.Run("file 2", func(t *testing.T) {
+				f, _ := os.Open(fs[1])
+
+				byt, _ := ioutil.ReadAll(f)
+
+				lines := strings.Split(strings.TrimSpace(string(byt)), "\n")
+				if len(lines) != 1 {
+					t.Fail()
+				}
+
+				if lines[0][0] != 'C' {
+					t.Fail()
+				}
+			})
 		})
 	})
 }
